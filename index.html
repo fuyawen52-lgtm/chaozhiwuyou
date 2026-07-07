@@ -820,10 +820,55 @@
             console.log('语音识别初始化完成');
         }
 
+        function setupWebSocket() {
+            setTimeout(function() {
+                const host = window.location.host;
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${host}/ws`;
+                
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {
+                    console.log('后端WebSocket连接成功');
+                };
+
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'status') {
+                            updateWindowData(data);
+                        }
+                    } catch (e) {
+                        console.log('解析后端消息失败:', e);
+                    }
+                };
+
+                ws.onerror = function(error) {
+                    console.log('后端WebSocket错误:', error);
+                };
+
+                ws.onclose = function() {
+                    console.log('后端WebSocket连接关闭');
+                    if (isRecognizing) {
+                        setTimeout(function() {
+                            if (isRecognizing) {
+                                try {
+                                    ws = new WebSocket(wsUrl);
+                                } catch (e) {
+                                    console.log('重连后端失败:', e);
+                                }
+                            }
+                        }, 2000);
+                    }
+                };
+            }, 1000);
+        }
+
         function createNewRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
             if (!SpeechRecognition) {
-                showTranscriptError('您的浏览器不支持语音识别功能，请使用Chrome或Edge浏览器');
+                showTranscriptError('您的浏览器不支持语音识别功能<br>请使用 Chrome、Edge、Safari 或 Opera 浏览器');
                 return null;
             }
 
@@ -885,6 +930,8 @@
                         }, 1000);
                     } else {
                         console.log('语音识别多次重启失败，请刷新页面');
+                        showTranscriptError('语音识别服务不稳定，请刷新页面重试');
+                        isRecognizing = false;
                     }
                 }
             };
@@ -922,48 +969,7 @@
                     isRecognizing = true;
                     startDurationCounter();
                     console.log('语音识别已启动');
-                    
-                    setTimeout(function() {
-                        const host = window.location.host;
-                        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                        const wsUrl = `${protocol}//${host}/ws`;
-                        
-                        ws = new WebSocket(wsUrl);
-
-                        ws.onopen = function() {
-                            console.log('后端WebSocket连接成功');
-                        };
-
-                        ws.onmessage = function(event) {
-                            try {
-                                const data = JSON.parse(event.data);
-                                if (data.type === 'status') {
-                                    updateWindowData(data);
-                                }
-                            } catch (e) {
-                                console.log('解析后端消息失败:', e);
-                            }
-                        };
-
-                        ws.onerror = function(error) {
-                            console.log('后端WebSocket错误:', error);
-                        };
-
-                        ws.onclose = function() {
-                            console.log('后端WebSocket连接关闭');
-                            if (isRecognizing) {
-                                setTimeout(function() {
-                                    if (isRecognizing) {
-                                        try {
-                                            ws = new WebSocket(wsUrl);
-                                        } catch (e) {
-                                            console.log('重连后端失败:', e);
-                                        }
-                                    }
-                                }, 2000);
-                            }
-                        };
-                    }, 1000);
+                    setupWebSocket();
                 }
 
             } catch (error) {
