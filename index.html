@@ -904,15 +904,17 @@
                     }
                 });
 
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    analyser = audioCtx.createAnalyser();
-                    analyser.fftSize = 256;
-                    const source = audioCtx.createMediaStreamSource(audioStream);
-                    source.connect(analyser);
-                    dataArray = new Uint8Array(analyser.frequencyBinCount);
-                    updateWaves();
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
                 }
+                
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                const source = audioCtx.createMediaStreamSource(audioStream);
+                source.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                updateWaves();
 
                 recognition = createNewRecognition();
                 if (recognition) {
@@ -921,45 +923,47 @@
                     startDurationCounter();
                     console.log('语音识别已启动');
                     
-                    const host = window.location.host;
-                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${protocol}//${host}/ws`;
-                    
-                    ws = new WebSocket(wsUrl);
+                    setTimeout(function() {
+                        const host = window.location.host;
+                        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                        const wsUrl = `${protocol}//${host}/ws`;
+                        
+                        ws = new WebSocket(wsUrl);
 
-                    ws.onopen = function() {
-                        console.log('后端WebSocket连接成功');
-                    };
+                        ws.onopen = function() {
+                            console.log('后端WebSocket连接成功');
+                        };
 
-                    ws.onmessage = function(event) {
-                        try {
-                            const data = JSON.parse(event.data);
-                            if (data.type === 'status') {
-                                updateWindowData(data);
-                            }
-                        } catch (e) {
-                            console.log('解析后端消息失败:', e);
-                        }
-                    };
-
-                    ws.onerror = function(error) {
-                        console.log('后端WebSocket错误:', error);
-                    };
-
-                    ws.onclose = function() {
-                        console.log('后端WebSocket连接关闭');
-                        if (isRecognizing) {
-                            setTimeout(function() {
-                                if (isRecognizing) {
-                                    try {
-                                        ws = new WebSocket(wsUrl);
-                                    } catch (e) {
-                                        console.log('重连后端失败:', e);
-                                    }
+                        ws.onmessage = function(event) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                if (data.type === 'status') {
+                                    updateWindowData(data);
                                 }
-                            }, 2000);
-                        }
-                    };
+                            } catch (e) {
+                                console.log('解析后端消息失败:', e);
+                            }
+                        };
+
+                        ws.onerror = function(error) {
+                            console.log('后端WebSocket错误:', error);
+                        };
+
+                        ws.onclose = function() {
+                            console.log('后端WebSocket连接关闭');
+                            if (isRecognizing) {
+                                setTimeout(function() {
+                                    if (isRecognizing) {
+                                        try {
+                                            ws = new WebSocket(wsUrl);
+                                        } catch (e) {
+                                            console.log('重连后端失败:', e);
+                                        }
+                                    }
+                                }, 2000);
+                            }
+                        };
+                    }, 1000);
                 }
 
             } catch (error) {
