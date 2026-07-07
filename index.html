@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translate Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #E8E8E8;
+        }
+
+        .app-container {
+            width: 100vw;
+            height: 100vh;
+            background: #FDFDFD;
+            border-radius: 0px 0px 0px 0px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ===== 首页样式 ===== */
+        .blur-orange {
+            width: 239px;
+            height: 232px;
+            background: rgba(255, 152, 93, 0.3);
+            border-radius: 0px 0px 0px 0px;
+            filter: blur(261.8px);
+            position: absolute;
+            left: 0;
+            bottom: 20%;
+            animation: flowOrange 8s ease-in-out infinite;
+        }
+
+        .blur-yellow {
+            width: 142px;
+            height: 140px;
+            background: rgba(254, 204, 91, 0.3);
+            border-radius: 0px 0px 0px 0px;
+            filter: blur(133.7px);
+            position: absolute;
+            right: 0;
+            top: 20%;
+            animation: flowYellow 10s ease-in-out infinite;
+        }
+
+        .logo {
+            position: absolute;
+            top: 5px;
+            left: 20px;
+            z-index: 10;
+        }
+
+        .logo img {
+            display: block;
+            max-width: 160px;
+            height: auto;
+        }
+
+        /* 首页内容容器 - 用于整体退场缩放 */
+        .home-content {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: center center;
+        }
+
+        .home-content.shrink-exit {
+            animation: shrinkBounceOut 0.6s ease forwards;
+            pointer-events: none;
+        }
+
+        .center-group {
+            position: absolute;
+            top: calc(50% - 120px);
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .center-group .mascot img {
+            display: block;
+            max-width: 110px;
+            height: auto;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .center-group .title {
+            margin-bottom: 0;
+        }
+
+        .center-group .title img {
+            display: block;
+            max-width: 400px;
+            height: auto;
+        }
+
+        .center-group .subtitle {
+            margin-top: -10px;
+        }
+
+        .center-group .subtitle img {
+            display: block;
+            max-width: 190px;
+            height: auto;
+        }
+
+        .start-btn {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .start-btn img {
+            display: block;
+            max-width: 140px;
+            height: auto;
+            cursor: pointer;
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+
+        .start-btn img:hover {
+            transform: scale(1.12);
+            filter: drop-shadow(0 4px 16px rgba(255, 152, 93, 0.5));
+        }
+
+        /* ===== 退场动画 ===== */
+        @keyframes shrinkBounceOut {
+            0% { transform: scale(1); opacity: 1; }
+            30% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        /* ===== 录音页样式 ===== */
+        .windows-row {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 40px;
+        }
+
+        .recording-window,
+        .word-count-window,
+        .keyword-window,
+        .highlight-window {
+            background: none;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(80px);
+            opacity: 0;
+            transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+        }
+
+        .recording-window.show,
+        .word-count-window.show,
+        .keyword-window.show,
+        .highlight-window.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .recording-window,
+        .word-count-window,
+        .keyword-window,
+        .highlight-window {
+            position: relative;
+        }
+
+        .recording-window img,
+        .word-count-window img,
+        .keyword-window img,
+        .highlight-window img {
+            display: block;
+            max-width: 280px;
+            height: auto;
+            border-radius: 20px;
+        }
+
+        .window-data {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            width: 80%;
+            line-height: 1.4;
+        }
+
+        .keyword-window,
+        .highlight-window {
+            cursor: pointer;
+        }
+
+        .details-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 16px 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 30;
+            min-width: 300px;
+            max-width: 800px;
+        }
+
+        .details-panel.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .details-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .details-content {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.8;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .details-content .keyword-tag {
+            display: inline-block;
+            background: rgba(255, 152, 93, 0.15);
+            color: #FF985D;
+            padding: 4px 12px;
+            border-radius: 16px;
+            margin: 4px;
+            font-size: 13px;
+        }
+
+        .details-content .highlight-item {
+            margin-bottom: 8px;
+            padding-left: 12px;
+            border-left: 3px solid #FF985D;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        @keyframes modalAppear {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes dotBounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* ===== 语音框样式 ===== */
+        .voice-box {
+            position: absolute;
+            z-index: 20;
+            transform: scaleX(0);
+            opacity: 0;
+            transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+        }
+
+        .voice-box.show {
+            transform: scaleX(1);
+            opacity: 1;
+        }
+
+        .voice-box img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .voice-box .listening-prompt {
+            position: absolute;
+            top: calc(50% - 90px);
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            z-index: 12;
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .voice-box .listening-prompt.show {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .voice-box .listening-prompt.flash {
+            animation: flash 1.5s infinite;
+        }
+
+        .voice-box .listening-prompt img {
+            display: block;
+            max-width: 450px;
+            height: auto;
+        }
+
+        .voice-box .jiangxiaochuang {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            z-index: 11;
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .voice-box .jiangxiaochuang.pop-in {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .voice-box .jiangxiaochuang img {
+            display: block;
+            max-width: 80px;
+            height: auto;
+        }
+
+        /* ===== 声波样式 ===== */
+        .voice-box .wave-container {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 11;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 80px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .voice-box .wave-container.show {
+            opacity: 1;
+        }
+
+        .voice-box .wave-left {
+            right: calc(50% + 55px);
+        }
+
+        .voice-box .wave-right {
+            left: calc(50% + 55px);
+        }
+
+        .voice-box .wave-container .bar {
+            width: 4px;
+            border-radius: 2px;
+            background: linear-gradient(180deg, #FF985D, #FECC5B);
+            transition: height 0.08s ease;
+            height: 4px;
+        }
+
+        /* ===== 语音转文字显示区域 ===== */
+        .transcript-area {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 1200px;
+            bottom: 350px;
+            padding: 30px 40px;
+            z-index: 9;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            overflow-y: auto;
+            pointer-events: auto;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 70%, rgba(255, 255, 255, 0) 100%);
+        }
+
+        .transcript-area.show {
+            opacity: 1;
+        }
+
+        .transcript-area .segment-item {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .transcript-area .segment-dot {
+            width: 8px;
+            height: 8px;
+            background: #FF985D;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 8px;
+        }
+
+        .transcript-area .segment-text {
+            font-size: 16px;
+            color: #222;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-weight: 500;
+        }
+
+        .transcript-area .segment-text .char {
+            display: inline;
+            opacity: 1;
+        }
+
+        .transcript-area .segment-text .char.current {
+            color: #FF985D;
+            font-weight: 500;
+        }
+
+        /* ===== 分析弹窗样式 ===== */
+        .analysis-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .analysis-modal.show {
+            display: flex;
+        }
+
+        .analysis-modal .modal-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(8px);
+        }
+
+        .analysis-modal .modal-content {
+            position: relative;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 60px 80px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            animation: modalAppear 0.4s ease forwards;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .analysis-modal.show .modal-content {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .analysis-modal .analysis-icon {
+            position: relative;
+            width: 160px;
+            height: 160px;
+            margin: 0 auto 30px;
+            flex-shrink: 0;
+            opacity: 0;
+            animation: fadeInUp 0.5s ease 0.3s forwards;
+        }
+
+        .analysis-modal .ring-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .analysis-modal .ring-container:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            transform: translate(-50%, -50%);
+        }
+
+        .analysis-modal .ring-container:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            transform: translate(-50%, -50%);
+        }
+
+        .analysis-modal .ring-container:nth-child(3) {
+            width: 160px;
+            height: 160px;
+            transform: translate(-50%, -50%);
+        }
+
+        .analysis-modal .data-ring {
+            width: 100%;
+            height: 100%;
+            border: 4px solid transparent;
+            border-top-color: #FF985D;
+            border-radius: 50%;
+            animation: rotate 2s linear infinite;
+        }
+
+        .analysis-modal .data-ring.ring1 {
+            border-top-color: #FF985D;
+        }
+
+        .analysis-modal .data-ring.ring2 {
+            border-top-color: #FECC5B;
+            animation-delay: 0.3s;
+        }
+
+        .analysis-modal .data-ring.ring3 {
+            border-top-color: #FF6B6B;
+            animation-delay: 0.6s;
+        }
+
+        .analysis-modal .pulse-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 160px;
+            height: 160px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 152, 93, 0.4) 0%, transparent 70%);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .analysis-modal .analysis-text {
+            font-size: 20px;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            text-align: center;
+            opacity: 0;
+            animation: fadeInUp 0.5s ease 0.5s forwards;
+        }
+
+        .analysis-modal .analysis-dots {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-shrink: 0;
+            opacity: 0;
+            animation: fadeInUp 0.5s ease 0.7s forwards;
+        }
+
+        .analysis-modal .analysis-dots span {
+            width: 10px;
+            height: 10px;
+            background: #FF985D;
+            border-radius: 50%;
+            animation: dotBounce 1.4s ease-in-out infinite both;
+        }
+
+        .analysis-modal .analysis-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .analysis-modal .analysis-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        /* ===== 动画 ===== */
+        @keyframes flowOrange {
+            0%   { transform: translate(0, 0); }
+            25%  { transform: translate(60px, -40px); }
+            50%  { transform: translate(120px, 20px); }
+            75%  { transform: translate(40px, 50px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        @keyframes flowYellow {
+            0%   { transform: translate(0, 0); }
+            25%  { transform: translate(-50px, 30px); }
+            50%  { transform: translate(-100px, -20px); }
+            75%  { transform: translate(-30px, -50px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container" id="app">
+        <div class="logo" id="logo">
+            <img src="./左上角logo.png" alt="超职无忧">
+        </div>
+
+        <div class="blur-orange"></div>
+        <div class="blur-yellow"></div>
+
+        <!-- 首页内容容器 -->
+        <div class="home-content" id="homeContent">
+            <div class="start-btn" id="startBtn">
+                <img src="./开始按钮.png" alt="开始">
+            </div>
+            <div class="center-group" id="centerGroup">
+                <div class="mascot">
+                    <img src="./中心小超.png" alt="小超">
+                </div>
+                <div class="title">
+                    <img src="./超职无忧AI会议分析.png" alt="超职无忧AI会议分析">
+                </div>
+                <div class="subtitle">
+                    <img src="./精准语音转文字，会议纪要一键成型@2x.png" alt="精准语音转文字，会议纪要一键成型">
+                </div>
+            </div>
+        </div>
+
+        <!-- 语音转文字显示区域 -->
+        <div class="transcript-area" id="transcriptArea">
+            <div id="transcriptContent"></div>
+        </div>
+
+        <!-- 语音框 -->
+        <div class="voice-box" id="voiceBox">
+            <img src="./语音框.png" alt="语音框">
+            <div class="wave-container wave-left" id="waveLeft"></div>
+            <div class="listening-prompt" id="listeningPrompt">
+                <img src="./江小创正在听，请发言.png" alt="江小创正在听，请发言">
+            </div>
+            <div class="jiangxiaochuang" id="jiangxiaochuang">
+                <img src="./江小创.png" alt="江小创">
+            </div>
+            <div class="wave-container wave-right" id="waveRight"></div>
+        </div>
+
+        <!-- 录音页窗口组 -->
+        <div class="windows-row" id="windowsRow">
+            <div class="recording-window" id="recordingWindow">
+                <img src="./已录音时长窗口.png" alt="已录音时长窗口">
+                <div class="window-data" id="durationData">00:00</div>
+            </div>
+            <div class="word-count-window" id="wordCountWindow">
+                <img src="./已记录字数.png" alt="已记录字数">
+                <div class="window-data" id="wordCountData">0</div>
+            </div>
+            <div class="keyword-window" id="keywordWindow">
+                <img src="./已摘录关键词.png" alt="已摘录关键词">
+                <div class="window-data" id="keywordData">0</div>
+            </div>
+            <div class="highlight-window" id="highlightWindow">
+                <img src="./已识别重点.png" alt="已识别重点">
+                <div class="window-data" id="highlightData">0</div>
+            </div>
+        </div>
+
+        <!-- 关键词详情显示区域 -->
+        <div class="details-panel" id="detailsPanel">
+            <div class="details-header">关键词详情</div>
+            <div class="details-content" id="detailsContent"></div>
+        </div>
+
+        <!-- 分析弹窗 -->
+        <div class="analysis-modal" id="analysisModal">
+            <div class="modal-bg"></div>
+            <div class="modal-content">
+                <div class="analysis-icon">
+                    <div class="ring-container">
+                        <div class="data-ring ring1"></div>
+                    </div>
+                    <div class="ring-container">
+                        <div class="data-ring ring2"></div>
+                    </div>
+                    <div class="ring-container">
+                        <div class="data-ring ring3"></div>
+                    </div>
+                    <div class="pulse-circle"></div>
+                </div>
+                <div class="analysis-text">识别到语音已暂停录入，正在识别并分析所录取的信息......</div>
+                <div class="analysis-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 声波初始化 =====
+        const BAR_COUNT = 18;
+        let audioCtx, analyser, dataArray, waveAnimId;
+
+        function createWaveBars() {
+            const waveLeft = document.getElementById('waveLeft');
+            const waveRight = document.getElementById('waveRight');
+            for (let i = 0; i < BAR_COUNT; i++) {
+                const barL = document.createElement('div');
+                barL.className = 'bar';
+                waveLeft.appendChild(barL);
+
+                const barR = document.createElement('div');
+                barR.className = 'bar';
+                waveRight.appendChild(barR);
+            }
+        }
+        createWaveBars();
+
+        function startMicrophone() {
+            console.log('麦克风将在语音识别中统一初始化');
+        }
+
+        function updateWaves() {
+            if (!analyser || !dataArray) {
+                waveAnimId = requestAnimationFrame(updateWaves);
+                return;
+            }
+            
+            analyser.getByteFrequencyData(dataArray);
+            const waveLeft = document.getElementById('waveLeft');
+            const waveRight = document.getElementById('waveRight');
+            const barsL = waveLeft.querySelectorAll('.bar');
+            const barsR = waveRight.querySelectorAll('.bar');
+            const step = Math.floor(dataArray.length / BAR_COUNT);
+
+            for (let i = 0; i < BAR_COUNT; i++) {
+                const val = dataArray[i * step] / 255;
+                const h = Math.max(4, val * 70);
+                barsL[i].style.height = h + 'px';
+                barsR[BAR_COUNT - 1 - i].style.height = h + 'px';
+            }
+            
+            waveAnimId = requestAnimationFrame(updateWaves);
+        }
+
+        function idleWaves() {
+            const waveLeft = document.getElementById('waveLeft');
+            const waveRight = document.getElementById('waveRight');
+            const barsL = waveLeft.querySelectorAll('.bar');
+            const barsR = waveRight.querySelectorAll('.bar');
+            let t = 0;
+            function animate() {
+                t += 0.05;
+                for (let i = 0; i < BAR_COUNT; i++) {
+                    const h = 4 + Math.sin(t + i * 0.4) * 6 + 4;
+                    barsL[i].style.height = h + 'px';
+                    barsR[BAR_COUNT - 1 - i].style.height = h + 'px';
+                }
+                waveAnimId = requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // ===== 语音转文字 =====
+        let isRecognizing = false;
+        let displayedText = '';
+        let lastDisplayedLen = 0;
+        let currentInterim = '';
+        let lastActivityTime = 0;
+        let silentTimeout = null;
+        const SILENT_THRESHOLD = 3000;
+        let needNewSegment = false;
+        let totalWordCount = 0;
+        let totalDuration = 0;
+        let durationInterval = null;
+
+        let longSilentTimeout = null;
+        const LONG_SILENT_THRESHOLD = 30 * 60 * 1000;
+        let isAnalyzing = false;
+
+        let ws = null;
+        let audioContext = null;
+        let audioStream = null;
+        let mediaRecorder = null;
+        let recorderInterval = null;
+        let recognition = null;
+        let recognitionRestartAttempts = 0;
+
+        function initSpeechRecognition() {
+            console.log('语音识别初始化完成');
+        }
+
+        function createNewRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showTranscriptError('您的浏览器不支持语音识别功能，请使用Chrome或Edge浏览器');
+                return null;
+            }
+
+            const newRecognition = new SpeechRecognition();
+            newRecognition.continuous = true;
+            newRecognition.interimResults = true;
+            newRecognition.lang = 'zh-CN';
+
+            newRecognition.onresult = function(event) {
+                recognitionRestartAttempts = 0;
+                
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                if (finalTranscript) {
+                    handleNewText(finalTranscript);
+                    sendToBackend(finalTranscript);
+                }
+                
+                currentInterim = interimTranscript;
+                updateInterim();
+            };
+
+            newRecognition.onerror = function(event) {
+                console.log('语音识别错误:', event.error);
+                if (event.error === 'not-allowed') {
+                    showTranscriptError('请允许麦克风权限');
+                    isRecognizing = false;
+                } else if (event.error === 'no-speech') {
+                    console.log('未检测到语音');
+                } else if (event.error !== 'aborted') {
+                    console.log('语音识别错误:', event.error);
+                }
+            };
+
+            newRecognition.onend = function() {
+                if (isRecognizing) {
+                    recognitionRestartAttempts++;
+                    if (recognitionRestartAttempts < 10) {
+                        setTimeout(function() {
+                            if (isRecognizing) {
+                                try {
+                                    recognition = createNewRecognition();
+                                    if (recognition) {
+                                        recognition.start();
+                                    }
+                                } catch (e) {
+                                    console.log('重启语音识别失败:', e);
+                                }
+                            }
+                        }, 1000);
+                    } else {
+                        console.log('语音识别多次重启失败，请刷新页面');
+                    }
+                }
+            };
+
+            return newRecognition;
+        }
+
+        async function startSpeechRecognition() {
+            if (isRecognizing) return;
+
+            try {
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: false,
+                        autoGainControl: true
+                    }
+                });
+
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 256;
+                    const source = audioCtx.createMediaStreamSource(audioStream);
+                    source.connect(analyser);
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    updateWaves();
+                }
+
+                recognition = createNewRecognition();
+                if (recognition) {
+                    recognition.start();
+                    isRecognizing = true;
+                    startDurationCounter();
+                    console.log('语音识别已启动');
+                    
+                    const host = window.location.host;
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${host}/ws`;
+                    
+                    ws = new WebSocket(wsUrl);
+
+                    ws.onopen = function() {
+                        console.log('后端WebSocket连接成功');
+                    };
+
+                    ws.onmessage = function(event) {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'status') {
+                                updateWindowData(data);
+                            }
+                        } catch (e) {
+                            console.log('解析后端消息失败:', e);
+                        }
+                    };
+
+                    ws.onerror = function(error) {
+                        console.log('后端WebSocket错误:', error);
+                    };
+
+                    ws.onclose = function() {
+                        console.log('后端WebSocket连接关闭');
+                        if (isRecognizing) {
+                            setTimeout(function() {
+                                if (isRecognizing) {
+                                    try {
+                                        ws = new WebSocket(wsUrl);
+                                    } catch (e) {
+                                        console.log('重连后端失败:', e);
+                                    }
+                                }
+                            }, 2000);
+                        }
+                    };
+                }
+
+            } catch (error) {
+                console.log('语音识别启动失败:', error);
+                if (error.name === 'NotAllowedError') {
+                    showTranscriptError('请允许麦克风权限以使用语音转文字功能');
+                } else {
+                    showTranscriptError('语音识别启动失败: ' + error.message);
+                }
+            }
+        }
+
+        function handleNewText(text) {
+            lastActivityTime = Date.now();
+            
+            if (silentTimeout) {
+                clearTimeout(silentTimeout);
+            }
+            
+            resetLongSilentTimer();
+            
+            checkTriggerKeyword(text);
+            
+            const transcriptArea = document.getElementById('transcriptArea');
+            const content = document.getElementById('transcriptContent');
+            const segments = content.querySelectorAll('.segment-item');
+            
+            console.log('处理新文字:', text, '段落数:', segments.length, 'needNewSegment:', needNewSegment);
+            
+            if (segments.length === 0 || needNewSegment) {
+                createNewSegment(text);
+                needNewSegment = false;
+            } else {
+                const lastSegment = segments[segments.length - 1];
+                const textContainer = lastSegment.querySelector('.segment-text');
+                const currentText = textContainer.innerText;
+                
+                if (currentText.length > 0) {
+                    textContainer.innerText += text;
+                } else {
+                    textContainer.innerText = text;
+                }
+            }
+            
+            setTimeout(function() {
+                transcriptArea.scrollTop = transcriptArea.scrollHeight;
+            }, 50);
+            
+            displayedText += text;
+            totalWordCount += text.length;
+            
+            updateWordCount();
+            
+            silentTimeout = setTimeout(function() {
+                console.log('3秒无活动，准备新段落');
+                needNewSegment = true;
+            }, SILENT_THRESHOLD);
+        }
+
+        function resetLongSilentTimer() {
+            if (longSilentTimeout) {
+                clearTimeout(longSilentTimeout);
+            }
+            
+            if (isAnalyzing) {
+                hideAnalysisModal();
+                isAnalyzing = false;
+            }
+            
+            longSilentTimeout = setTimeout(function() {
+                showAnalysisModal();
+                isAnalyzing = true;
+            }, LONG_SILENT_THRESHOLD);
+        }
+
+        function checkTriggerKeyword(text) {
+            if (text.includes('超职无忧')) {
+                console.log('检测到关键词"超职无忧"，触发分析弹窗');
+                showAnalysisModal();
+                isAnalyzing = true;
+            }
+            
+            if (text.includes('暂停')) {
+                console.log('检测到关键词"暂停"，触发分析弹窗');
+                showAnalysisModal();
+                isAnalyzing = true;
+            }
+        }
+
+        function showAnalysisModal() {
+            const modal = document.getElementById('analysisModal');
+            modal.classList.add('show');
+        }
+
+        function hideAnalysisModal() {
+            const modal = document.getElementById('analysisModal');
+            modal.classList.remove('show');
+        }
+
+        function createNewSegment(text) {
+            const content = document.getElementById('transcriptContent');
+            const transcriptArea = document.getElementById('transcriptArea');
+            const segment = document.createElement('div');
+            segment.className = 'segment-item';
+            
+            const dot = document.createElement('div');
+            dot.className = 'segment-dot';
+            
+            const textContainer = document.createElement('div');
+            textContainer.className = 'segment-text';
+            textContainer.innerText = text;
+            
+            segment.appendChild(dot);
+            segment.appendChild(textContainer);
+            content.appendChild(segment);
+            
+            setTimeout(function() {
+                transcriptArea.scrollTop = transcriptArea.scrollHeight;
+            }, 50);
+        }
+
+        function sendToBackend(text) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ text: text }));
+            }
+        }
+
+        function startDurationCounter() {
+            durationInterval = setInterval(function() {
+                totalDuration++;
+                updateDuration();
+            }, 1000);
+        }
+
+        function updateDuration() {
+            const minutes = Math.floor(totalDuration / 60).toString().padStart(2, '0');
+            const seconds = (totalDuration % 60).toString().padStart(2, '0');
+            const durationData = document.getElementById('durationData');
+            if (durationData) {
+                durationData.innerText = minutes + ':' + seconds;
+            }
+        }
+
+        function updateWordCount() {
+            const wordCountData = document.getElementById('wordCountData');
+            if (wordCountData) {
+                wordCountData.innerText = totalWordCount;
+            }
+        }
+
+        let currentKeywords = [];
+        let currentHighlights = [];
+
+        function updateWindowData(data) {
+            if (data.duration !== undefined) {
+                totalDuration = data.duration;
+                updateDuration();
+            }
+            
+            if (data.word_count !== undefined) {
+                totalWordCount = data.word_count;
+                updateWordCount();
+            }
+            
+            if (data.keywords) {
+                currentKeywords = data.keywords;
+                const keywordData = document.getElementById('keywordData');
+                if (keywordData) {
+                    keywordData.innerText = currentKeywords.length;
+                }
+            }
+            
+            if (data.highlights) {
+                currentHighlights = data.highlights;
+                const highlightData = document.getElementById('highlightData');
+                if (highlightData) {
+                    highlightData.innerText = currentHighlights.length;
+                }
+            }
+        }
+
+        function setupWindowClicks() {
+            const keywordWindow = document.getElementById('keywordWindow');
+            const highlightWindow = document.getElementById('highlightWindow');
+            const detailsPanel = document.getElementById('detailsPanel');
+            const detailsHeader = document.querySelector('.details-header');
+            const detailsContent = document.getElementById('detailsContent');
+
+            keywordWindow.addEventListener('click', function() {
+                if (currentKeywords.length === 0) {
+                    detailsHeader.innerText = '关键词详情';
+                    detailsContent.innerHTML = '<span style="color: #999;">暂无关键词</span>';
+                } else {
+                    detailsHeader.innerText = '关键词详情';
+                    detailsContent.innerHTML = currentKeywords.map(k => 
+                        `<span class="keyword-tag">${k}</span>`
+                    ).join('');
+                }
+                detailsPanel.classList.toggle('show');
+            });
+
+            highlightWindow.addEventListener('click', function() {
+                if (currentHighlights.length === 0) {
+                    detailsHeader.innerText = '重点详情';
+                    detailsContent.innerHTML = '<span style="color: #999;">暂无重点</span>';
+                } else {
+                    detailsHeader.innerText = '重点详情';
+                    detailsContent.innerHTML = currentHighlights.map(h => 
+                        `<div class="highlight-item">${h}</div>`
+                    ).join('');
+                }
+                detailsPanel.classList.toggle('show');
+            });
+        }
+
+        function stopSpeechRecognition() {
+            isRecognizing = false;
+            recognitionRestartAttempts = 0;
+            
+            if (recognition) {
+                try {
+                    recognition.abort();
+                } catch (e) {
+                    console.log('停止识别失败:', e);
+                }
+                recognition = null;
+            }
+            
+            if (durationInterval) {
+                clearInterval(durationInterval);
+                durationInterval = null;
+            }
+            if (silentTimeout) {
+                clearTimeout(silentTimeout);
+                silentTimeout = null;
+            }
+            if (longSilentTimeout) {
+                clearTimeout(longSilentTimeout);
+                longSilentTimeout = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder = null;
+            }
+            if (recorderInterval) {
+                clearInterval(recorderInterval);
+                recorderInterval = null;
+            }
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (audioCtx) {
+                audioCtx.close();
+                audioCtx = null;
+            }
+        }
+
+        function updateInterim() {
+            const content = document.getElementById('transcriptContent');
+            const interimSpan = document.getElementById('interimSpan');
+            
+            if (interimSpan) {
+                interimSpan.remove();
+            }
+            
+            if (currentInterim) {
+                const segments = content.querySelectorAll('.segment-item');
+                let textDiv;
+                
+                if (segments.length === 0) {
+                    createNewSegment('');
+                    textDiv = content.querySelector('.segment-text');
+                } else {
+                    textDiv = segments[segments.length - 1].querySelector('.segment-text');
+                }
+                
+                if (textDiv) {
+                    const span = document.createElement('span');
+                    span.id = 'interimSpan';
+                    span.className = 'char current';
+                    span.textContent = currentInterim;
+                    textDiv.appendChild(span);
+                }
+            }
+        }
+
+        function showTranscriptError(msg) {
+            const content = document.getElementById('transcriptContent');
+            content.innerHTML = '<span style="color: #999; font-size: 14px;">' + msg + '</span>';
+        }
+
+        // ===== 页面逻辑 =====
+        function positionStartBtn() {
+            const subtitle = document.querySelector('.subtitle');
+            const startBtn = document.getElementById('startBtn');
+            if (subtitle && startBtn) {
+                const rect = subtitle.getBoundingClientRect();
+                const containerRect = document.querySelector('.app-container').getBoundingClientRect();
+                startBtn.style.top = (rect.bottom - containerRect.top + 100) + 'px';
+            }
+        }
+
+        function positionVoiceBox() {
+            const windowsRow = document.getElementById('windowsRow');
+            const voiceBox = document.getElementById('voiceBox');
+            const transcriptArea = document.getElementById('transcriptArea');
+            if (windowsRow && voiceBox) {
+                const rowRect = windowsRow.getBoundingClientRect();
+                const containerRect = document.querySelector('.app-container').getBoundingClientRect();
+                voiceBox.style.left = (rowRect.left - containerRect.left + (rowRect.width - rowRect.width * 0.9) / 2) + 'px';
+                voiceBox.style.bottom = (containerRect.bottom - rowRect.top + 60) + 'px';
+                voiceBox.style.width = (rowRect.width * 0.9) + 'px';
+                
+                setTimeout(function() {
+                    const voiceBoxRect = voiceBox.getBoundingClientRect();
+                    const voiceBoxTop = voiceBoxRect.top - containerRect.top;
+                    transcriptArea.style.bottom = (containerRect.height - voiceBoxTop + 20) + 'px';
+                }, 100);
+            }
+        }
+
+        document.getElementById('startBtn').addEventListener('click', function() {
+            const homeContent = document.getElementById('homeContent');
+            const recordingWindow = document.getElementById('recordingWindow');
+            const wordCountWindow = document.getElementById('wordCountWindow');
+            const keywordWindow = document.getElementById('keywordWindow');
+            const highlightWindow = document.getElementById('highlightWindow');
+            const voiceBox = document.getElementById('voiceBox');
+
+            // 初始化语音识别
+            initSpeechRecognition();
+
+            // 首页内容整体缩小退场
+            homeContent.classList.add('shrink-exit');
+
+            // 退场完成后四个窗口一起从下方移入
+            setTimeout(function() {
+                recordingWindow.classList.add('show');
+                wordCountWindow.classList.add('show');
+                keywordWindow.classList.add('show');
+                highlightWindow.classList.add('show');
+
+                positionVoiceBox();
+            }, 500);
+
+            // 窗口移入后语音框从中间向两边展开，同时显示转文字区域
+            setTimeout(function() {
+                voiceBox.classList.add('show');
+                document.getElementById('transcriptArea').classList.add('show');
+                setupWindowClicks();
+            }, 1000);
+
+            // 语音框展开完成后江小创缩放弹入，同时显示声波和启动语音识别
+            setTimeout(function() {
+                document.getElementById('jiangxiaochuang').classList.add('pop-in');
+                document.getElementById('waveLeft').classList.add('show');
+                document.getElementById('waveRight').classList.add('show');
+                startMicrophone();
+                startSpeechRecognition();
+                
+                // 江小创出现后显示"正在听，请发言"并开始闪烁
+                setTimeout(function() {
+                    const listeningPrompt = document.getElementById('listeningPrompt');
+                    listeningPrompt.classList.add('show');
+                    setTimeout(function() {
+                        listeningPrompt.classList.add('flash');
+                    }, 500);
+                }, 600);
+            }, 1500);
+        });
+
+        window.addEventListener('load', positionStartBtn);
+        window.addEventListener('resize', positionStartBtn);
+    </script>
+</body>
+</html>
