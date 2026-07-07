@@ -47,7 +47,6 @@ class TranscriptionSession:
     
     def update_keywords(self):
         full_text = ' '.join(self.text_segments)
-        print(f"Full text for keyword extraction: '{full_text}', length: {len(full_text)}")
         
         if len(full_text) < 5:
             self.keywords = []
@@ -56,15 +55,11 @@ class TranscriptionSession:
         try:
             keywords = jieba.analyse.extract_tags(full_text, topK=8, withWeight=False)
             self.keywords = keywords
-            print(f"Extracted keywords: {keywords}")
         except Exception as e:
-            print(f"Keyword extraction error: {e}")
-            traceback.print_exc()
             self.keywords = []
     
     def update_highlights(self):
         full_text = ' '.join(self.text_segments)
-        print(f"Full text for highlight extraction: '{full_text}'")
         self.highlights = []
         
         key_topics = ['创新', '创造', '研发', '技术', '产品', '市场', '用户', '需求', '解决方案', '问题',
@@ -83,7 +78,6 @@ class TranscriptionSession:
                     break
         
         self.highlights = list(set(self.highlights))[:5]
-        print(f"Extracted highlights: {self.highlights}")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -98,15 +92,9 @@ async def websocket_endpoint(websocket: WebSocket):
             session = active_sessions[session_id]
             
             text = ""
-            if data.get('text'):
-                text = data['text'].strip()
-            elif data.get('bytes'):
-                try:
-                    text = data['bytes'].decode('utf-8').strip()
-                except:
-                    text = ""
             
-            print(f"Received raw data: {data}")
+            if 'text' in data:
+                text = data['text'].strip()
             
             if text:
                 session.add_segment(text)
@@ -151,7 +139,8 @@ async def serve_file(full_path: str):
     except:
         return FileResponse("index.html")
 
+import uvicorn
+
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("backend:app", host="0.0.0.0", port=port, reload=False)
